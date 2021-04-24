@@ -49,7 +49,7 @@ public abstract class ScanningAppProvider extends AbstractLifeCycle implements A
 {
     private static final Logger LOG = Log.getLogger(ScanningAppProvider.class);
 
-    private Map<String, App> _appMap = new HashMap<String, App>();
+    private final Map<String, App> _appMap = new HashMap<>();
 
     private DeploymentManager _deploymentManager;
     protected FilenameFilter _filenameFilter;

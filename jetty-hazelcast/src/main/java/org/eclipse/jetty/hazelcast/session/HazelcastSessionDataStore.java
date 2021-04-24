@@ -20,6 +20,7 @@ package org.eclipse.jetty.hazelcast.session;
 
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -112,6 +113,7 @@ public class HazelcastSessionDataStore
         return true;
     }
 
+    // FIXME we should simply return Map here
     public IMap<String, SessionData> getSessionDataMap()
     {
         return sessionDataMap;
