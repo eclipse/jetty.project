@@ -19,6 +19,7 @@
 package org.eclipse.jetty.security.openid;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.security.Principal;
 import java.util.Map;
 import javax.servlet.http.HttpServlet;
@@ -30,20 +31,24 @@ import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.security.ConstraintMapping;
 import org.eclipse.jetty.security.ConstraintSecurityHandler;
+import org.eclipse.jetty.security.DynamicAuthenticator;
+import org.eclipse.jetty.security.HashLoginService;
+import org.eclipse.jetty.security.authentication.FormAuthenticator;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.servlet.ServletContextHandler;
+import org.eclipse.jetty.toolchain.test.MavenTestingUtils;
 import org.eclipse.jetty.util.security.Constraint;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 
-@SuppressWarnings("unchecked")
-public class OpenIdAuthenticationTest
+public class DynamicAuthenticationTest
 {
     public static final String CLIENT_ID = "testClient101";
     public static final String CLIENT_SECRET = "secret37989798";
@@ -72,42 +77,57 @@ public class OpenIdAuthenticationTest
 
         // configure security constraints
         Constraint constraint = new Constraint();
-        constraint.setName(Constraint.__OPENID_AUTH);
+        constraint.setName(Constraint.__DYNAMIC_AUTH);
         constraint.setRoles(new String[]{"**"});
         constraint.setAuthenticate(true);
 
         Constraint adminConstraint = new Constraint();
-        adminConstraint.setName(Constraint.__OPENID_AUTH);
+        adminConstraint.setName(Constraint.__DYNAMIC_AUTH);
         adminConstraint.setRoles(new String[]{"admin"});
         adminConstraint.setAuthenticate(true);
 
         // constraint mappings
-        ConstraintMapping profileMapping = new ConstraintMapping();
-        profileMapping.setConstraint(constraint);
-        profileMapping.setPathSpec("/profile");
+        ConstraintMapping openIdMapping = new ConstraintMapping();
+        openIdMapping.setConstraint(constraint);
+        openIdMapping.setPathSpec("/openid/*");
+
         ConstraintMapping loginMapping = new ConstraintMapping();
         loginMapping.setConstraint(constraint);
         loginMapping.setPathSpec("/login");
+
         ConstraintMapping adminMapping = new ConstraintMapping();
         adminMapping.setConstraint(adminConstraint);
         adminMapping.setPathSpec("/admin");
 
         // security handler
         ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
-        securityHandler.setAuthMethod(Constraint.__OPENID_AUTH);
-        securityHandler.setRealmName(openIdProvider.getProvider());
-        securityHandler.addConstraintMapping(profileMapping);
+        securityHandler.setRealmName("Dual Authentication");
+        securityHandler.addConstraintMapping(openIdMapping);
         securityHandler.addConstraintMapping(loginMapping);
         securityHandler.addConstraintMapping(adminMapping);
 
-        // Authentication using local OIDC Provider
-        server.addBean(new OpenIdConfiguration(openIdProvider.getProvider(), CLIENT_ID, CLIENT_SECRET));
-        securityHandler.setInitParameter(OpenIdAuthenticator.REDIRECT_PATH, "/redirect_path");
-        securityHandler.setInitParameter(OpenIdAuthenticator.ERROR_PAGE, "/error");
+        // Server wide Authentication Configuration.
+        HashLoginService loginService = new HashLoginService();
+        loginService.setConfig(MavenTestingUtils.getTestResourceFile("foo.properties").getAbsolutePath());
+        OpenIdConfiguration configuration = new OpenIdConfiguration(openIdProvider.getProvider(), CLIENT_ID, CLIENT_SECRET);
+        server.addBean(configuration);
+
+        // Add the DynamicAuthenticator.
+        DynamicAuthenticator dynamicAuthenticator = new DynamicAuthenticator();
+        dynamicAuthenticator.addMapping("/*", new FormAuthenticator());
+        dynamicAuthenticator.addMapping("/openid/*", new OpenIdAuthenticator(configuration), null);
+
+        // Any init params will go to all authenticators, so multiple authenticator of same type must be configured explicitly.
+        securityHandler.setInitParameter(OpenIdAuthenticator.REDIRECT_PATH, "/openid/auth");
+        securityHandler.setInitParameter(FormAuthenticator.__FORM_LOGIN_PAGE, "/login");
+
+        securityHandler.setAuthenticator(dynamicAuthenticator);
+        securityHandler.setLoginService(loginService);
         context.setSecurityHandler(securityHandler);
 
+        server.setHandler(context);
         server.start();
-        String redirectUri = "http://localhost:" + connector.getLocalPort() + "/redirect_path";
+        String redirectUri = "http://localhost:" + connector.getLocalPort() + "/openid/auth";
         openIdProvider.addRedirectUri(redirectUri);
 
         client = new HttpClient();
@@ -122,10 +142,15 @@ public class OpenIdAuthenticationTest
     }
 
     @Test
-    public void testLoginLogout() throws Exception
+    public void testOpenIdLogin() throws Exception
     {
-        openIdProvider.setUser(new OpenIdProvider.User("123456789", "Alice"));
+        // TODO
+    }
 
+    @Disabled("work in progress")
+    @Test
+    public void testFormLogin() throws Exception
+    {
         String appUriString = "http://localhost:" + connector.getLocalPort();
 
         // Initially not authenticated
@@ -159,14 +184,27 @@ public class OpenIdAuthenticationTest
         assertThat(content, containsString("not authenticated"));
     }
 
+    public static class OpenIdLoginPage extends HttpServlet
+    {
+        @Override
+        protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException
+        {
+            response.sendRedirect("/");
+        }
+    }
+
     public static class LoginPage extends HttpServlet
     {
         @Override
         protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException
         {
             response.setContentType("text/html");
-            response.getWriter().println("success");
-            response.getWriter().println("<br><a href=\"/\">Home</a>");
+            PrintWriter writer = response.getWriter();
+            writer.println("<form method=post action=\"j_security_check\" >");
+            writer.println("<input type=\"text\"  name= \"j_username\" >");
+            writer.println("<input type=\"password\"  name= \"j_password\" >");
+            writer.println("<input type=\"submit\" value=\"Submit\">");
+            writer.println("</form>");
         }
     }
 
@@ -185,6 +223,7 @@ public class OpenIdAuthenticationTest
         @Override
         protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException
         {
+            @SuppressWarnings("unchecked")
             Map<String, Object> userInfo = (Map<String, Object>)request.getSession().getAttribute(OpenIdAuthenticator.CLAIMS);
             response.getWriter().println(userInfo.get("sub") + ": success");
         }
@@ -196,19 +235,33 @@ public class OpenIdAuthenticationTest
         protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException
         {
             response.setContentType("text/html");
+            PrintWriter writer = response.getWriter();
             Principal userPrincipal = request.getUserPrincipal();
             if (userPrincipal != null)
             {
-                Map<String, Object> userInfo = (Map<String, Object>)request.getSession().getAttribute(OpenIdAuthenticator.CLAIMS);
-                response.getWriter().println("userId: " + userInfo.get("sub") + "<br>");
-                response.getWriter().println("name: " + userInfo.get("name") + "<br>");
-                response.getWriter().println("email: " + userInfo.get("email") + "<br>");
-                response.getWriter().println("<br><a href=\"/logout\">Logout</a>");
+                @SuppressWarnings("unchecked")
+                Map<String, Object> openIdInfo = (Map<String, Object>)request.getSession().getAttribute(OpenIdAuthenticator.CLAIMS);
+                if (openIdInfo != null)
+                {
+                    writer.println("<h3>OpenID Authenticated User</h3>");
+                    writer.println("userId: " + openIdInfo.get("sub") + "<br>");
+                    writer.println("name: " + openIdInfo.get("name") + "<br>");
+                    writer.println("email: " + openIdInfo.get("email") + "<br>");
+                }
+                else
+                {
+                    writer.println("<h3>Authenticated User</h3>");
+                    writer.println("name: " + userPrincipal.getName() + "<br>");
+                    writer.println("principal: " + userPrincipal.toString() + "<br>");
+                }
+
+                writer.println("<br><a href=\"/logout\">Logout</a>");
             }
             else
             {
-                response.getWriter().println("not authenticated");
-                response.getWriter().println("<br><a href=\"/login\">Login</a>");
+                writer.println("not authenticated");
+                writer.println("<br><a href=\"/login\">Form Login</a>");
+                writer.println("<br><a href=\"/openid/login\">OpenID Login</a>");
             }
         }
     }

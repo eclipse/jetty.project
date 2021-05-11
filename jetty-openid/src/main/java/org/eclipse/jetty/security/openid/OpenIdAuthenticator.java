@@ -53,7 +53,7 @@ import org.eclipse.jetty.util.security.Constraint;
  * <p>Implements authentication using OpenId Connect on top of OAuth 2.0.
  *
  * <p>The OpenIdAuthenticator redirects unauthenticated requests to the OpenID Connect Provider. The End-User is
- * eventually redirected back with an Authorization Code to the /j_security_check URI within the context.
+ * eventually redirected back with an Authorization Code to the path set by {@link #setRedirectPath(String)} within the context.
  * The Authorization Code is then used to authenticate the user through the {@link OpenIdCredentials} and {@link OpenIdLoginService}.
  * </p>
  * <p>
@@ -68,6 +68,8 @@ public class OpenIdAuthenticator extends LoginAuthenticator
 
     public static final String CLAIMS = "org.eclipse.jetty.security.openid.claims";
     public static final String RESPONSE = "org.eclipse.jetty.security.openid.response";
+    public static final String ISSUER = "org.eclipse.jetty.security.openid.issuer";
+    public static final String REDIRECT_PATH = "org.eclipse.jetty.security.openid.redirect_path";
     public static final String ERROR_PAGE = "org.eclipse.jetty.security.openid.error_page";
     public static final String J_URI = "org.eclipse.jetty.security.openid.URI";
     public static final String J_POST = "org.eclipse.jetty.security.openid.POST";
@@ -77,6 +79,7 @@ public class OpenIdAuthenticator extends LoginAuthenticator
     public static final String ERROR_PARAMETER = "error_description_jetty";
 
     private OpenIdConfiguration _configuration;
+    private String _redirectPath;
     private String _errorPage;
     private String _errorPath;
     private String _errorQuery;
@@ -84,11 +87,23 @@ public class OpenIdAuthenticator extends LoginAuthenticator
 
     public OpenIdAuthenticator()
     {
+        this(null, J_SECURITY_CHECK, null);
+    }
+
+    public OpenIdAuthenticator(OpenIdConfiguration configuration)
+    {
+        this(configuration, J_SECURITY_CHECK, null);
     }
 
     public OpenIdAuthenticator(OpenIdConfiguration configuration, String errorPage)
     {
-        this._configuration = configuration;
+        this(configuration, J_SECURITY_CHECK, errorPage);
+    }
+
+    public OpenIdAuthenticator(OpenIdConfiguration configuration, String redirectPath, String errorPage)
+    {
+        _configuration = configuration;
+        _redirectPath = redirectPath;
         if (errorPage != null)
             setErrorPage(errorPage);
     }
@@ -96,19 +111,23 @@ public class OpenIdAuthenticator extends LoginAuthenticator
     @Override
     public void setConfiguration(AuthConfiguration configuration)
     {
-        super.setConfiguration(configuration);
+        if (_configuration == null)
+        {
+            LoginService loginService = configuration.getLoginService();
+            if (!(loginService instanceof OpenIdLoginService))
+                throw new IllegalArgumentException("invalid LoginService " + loginService);
+            this._configuration = ((OpenIdLoginService)loginService).getConfiguration();
+        }
+
+        String redirectPath = configuration.getInitParameter(REDIRECT_PATH);
+        if (redirectPath != null)
+            _redirectPath = redirectPath;
 
         String error = configuration.getInitParameter(ERROR_PAGE);
         if (error != null)
             setErrorPage(error);
 
-        if (_configuration != null)
-            return;
-
-        LoginService loginService = configuration.getLoginService();
-        if (!(loginService instanceof OpenIdLoginService))
-            throw new IllegalArgumentException("invalid LoginService");
-        this._configuration = ((OpenIdLoginService)loginService).getConfiguration();
+        super.setConfiguration(new OpenIdAuthConfiguration(_configuration, configuration));
     }
 
     @Override
@@ -134,7 +153,18 @@ public class OpenIdAuthenticator extends LoginAuthenticator
         return _alwaysSaveUri;
     }
 
-    private void setErrorPage(String path)
+    public void setRedirectPath(String redirectPath)
+    {
+        if (!redirectPath.startsWith("/"))
+        {
+            LOG.warn("redirect path must start with /");
+            redirectPath = "/" + redirectPath;
+        }
+
+        _redirectPath = redirectPath;
+    }
+
+    public void setErrorPage(String path)
     {
         if (path == null || path.trim().length() == 0)
         {
@@ -175,6 +205,7 @@ public class OpenIdAuthenticator extends LoginAuthenticator
             session.setAttribute(SessionAuthentication.__J_AUTHENTICATED, cached);
             session.setAttribute(CLAIMS, ((OpenIdCredentials)credentials).getClaims());
             session.setAttribute(RESPONSE, ((OpenIdCredentials)credentials).getResponse());
+            session.setAttribute(ISSUER, _configuration.getIssuer());
         }
         return user;
     }
@@ -443,11 +474,11 @@ public class OpenIdAuthenticator extends LoginAuthenticator
 
     public boolean isJSecurityCheck(String uri)
     {
-        int jsc = uri.indexOf(J_SECURITY_CHECK);
+        int jsc = uri.indexOf(_redirectPath);
 
         if (jsc < 0)
             return false;
-        int e = jsc + J_SECURITY_CHECK.length();
+        int e = jsc + _redirectPath.length();
         if (e == uri.length())
             return true;
         char c = uri.charAt(e);
@@ -465,7 +496,7 @@ public class OpenIdAuthenticator extends LoginAuthenticator
         URIUtil.appendSchemeHostPort(redirectUri, request.getScheme(),
             request.getServerName(), request.getServerPort());
         redirectUri.append(request.getContextPath());
-        redirectUri.append(J_SECURITY_CHECK);
+        redirectUri.append(_redirectPath);
         return redirectUri.toString();
     }
 
