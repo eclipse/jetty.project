@@ -508,6 +508,23 @@ public class IO
     }
 
     /**
+     * This method will throw the supplied {@link Throwable} if it is an instance of {@link IOException},
+     * {@link RuntimeException} or {@link Error}. Otherwise it will be wrapped in a new {@link IOException} and thrown.
+     * @param t the cause of the exception.
+     * @throws IOException if supplied throwable is not RuntimeException or Error.
+     */
+    public static void throwCheckedIOException(Throwable t) throws IOException
+    {
+        if (t instanceof IOException)
+            throw (IOException)t;
+        if (t instanceof RuntimeException)
+            throw (RuntimeException)t;
+        if (t instanceof Error)
+            throw (Error)t;
+        throw new IOException(t);
+    }
+
+    /**
      * @return An outputstream to nowhere
      */
     public static OutputStream getNullStream()
