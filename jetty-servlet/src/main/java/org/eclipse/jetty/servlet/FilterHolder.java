@@ -239,7 +239,7 @@ public class FilterHolder extends Holder<Filter>
         public void addMappingForServletNames(EnumSet<DispatcherType> dispatcherTypes, boolean isMatchAfter, String... servletNames)
         {
             illegalStateIfContextStarted();
-            FilterMapping mapping = new FilterMapping();
+            FilterMapping mapping = new FilterMapping(Source.JAVAX_API);
             mapping.setFilterHolder(FilterHolder.this);
             mapping.setServletNames(servletNames);
             mapping.setDispatcherTypes(dispatcherTypes);
@@ -253,9 +253,9 @@ public class FilterHolder extends Holder<Filter>
         public void addMappingForUrlPatterns(EnumSet<DispatcherType> dispatcherTypes, boolean isMatchAfter, String... urlPatterns)
         {
             illegalStateIfContextStarted();
-            FilterMapping mapping = new FilterMapping();
+            FilterMapping mapping = new FilterMapping(Source.JAVAX_API);
             mapping.setFilterHolder(FilterHolder.this);
-            mapping.setPathSpecs(urlPatterns);
+            mapping.setServletPathSpecs(urlPatterns);
             mapping.setDispatcherTypes(dispatcherTypes);
             if (isMatchAfter)
                 getServletHandler().addFilterMapping(mapping);
@@ -288,7 +288,7 @@ public class FilterHolder extends Holder<Filter>
             {
                 if (mapping.getFilterHolder() != FilterHolder.this)
                     continue;
-                String[] specs = mapping.getPathSpecs();
+                String[] specs = mapping.getServletPathSpecs();
                 patterns.addAll(TypeUtil.asList(specs));
             }
             return patterns;

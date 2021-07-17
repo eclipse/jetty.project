@@ -18,25 +18,29 @@
 
 package org.eclipse.jetty.http.pathmap;
 
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class RegexPathSpec extends AbstractPathSpec
 {
-    private final String _declaration;
     private final PathSpecGroup _group;
     private final int _pathDepth;
     private final int _specLength;
     private final Pattern _pattern;
 
+    private static String normalize(String regex)
+    {
+        if (regex != null && regex.startsWith("regex|"))
+            return regex.substring("regex|".length());
+        return regex;
+    }
+
     public RegexPathSpec(String regex)
     {
-        String declaration;
-        if (regex.startsWith("regex|"))
-            declaration = regex.substring("regex|".length());
-        else
-            declaration = regex;
-        int specLength = declaration.length();
+        super(normalize(regex));
+        Objects.requireNonNull(regex);
+        String declaration = getDeclaration();
         // build up a simple signature we can use to identify the grouping
         boolean inGrouping = false;
         StringBuilder signature = new StringBuilder();
@@ -82,11 +86,16 @@ public class RegexPathSpec extends AbstractPathSpec
         else
             group = PathSpecGroup.MIDDLE_GLOB;
 
-        _declaration = declaration;
         _group = group;
         _pathDepth = pathDepth;
-        _specLength = specLength;
+        _specLength = declaration.length();
         _pattern = pattern;
+    }
+
+    @Override
+    public boolean is(String pathSpec)
+    {
+        return getDeclaration().equals(normalize(pathSpec));
     }
 
     protected Matcher getMatcher(String path)
@@ -153,12 +162,6 @@ public class RegexPathSpec extends AbstractPathSpec
             return path;
         }
         return null;
-    }
-
-    @Override
-    public String getDeclaration()
-    {
-        return _declaration;
     }
 
     @Override

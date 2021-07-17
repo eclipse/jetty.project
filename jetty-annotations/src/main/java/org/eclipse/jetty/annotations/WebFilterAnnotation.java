@@ -85,6 +85,7 @@ public class WebFilterAnnotation extends DiscoveredAnnotation
             return;
         }
 
+        Source source = new Source(Source.Origin.ANNOTATION, clazz.getName());
         String name = (filterAnnotation.filterName().equals("") ? clazz.getName() : filterAnnotation.filterName());
         String[] urlPatterns = filterAnnotation.value();
         if (urlPatterns.length == 0)
@@ -109,7 +110,7 @@ public class WebFilterAnnotation extends DiscoveredAnnotation
                 metaData.setOrigin(name + ".filter.init-param." + ip.name(), ip, clazz);
             }
 
-            FilterMapping mapping = new FilterMapping();
+            FilterMapping mapping = new FilterMapping(source);
             mapping.setFilterName(holder.getName());
 
             if (urlPatterns.length > 0)
@@ -119,7 +120,7 @@ public class WebFilterAnnotation extends DiscoveredAnnotation
                 {
                     paths.add(ServletPathSpec.normalize(s));
                 }
-                mapping.setPathSpecs(paths.toArray(new String[paths.size()]));
+                mapping.setServletPathSpecs(paths.toArray(new String[paths.size()]));
             }
 
             if (filterAnnotation.servletNames().length > 0)
@@ -180,7 +181,7 @@ public class WebFilterAnnotation extends DiscoveredAnnotation
             //from the annotation
             if (!mappingExists)
             {
-                FilterMapping mapping = new FilterMapping();
+                FilterMapping mapping = new FilterMapping(source);
                 mapping.setFilterName(holder.getName());
 
                 if (urlPatterns.length > 0)
@@ -190,7 +191,7 @@ public class WebFilterAnnotation extends DiscoveredAnnotation
                     {
                         paths.add(ServletPathSpec.normalize(s));
                     }
-                    mapping.setPathSpecs(paths.toArray(new String[paths.size()]));
+                    mapping.setServletPathSpecs(paths.toArray(new String[paths.size()]));
                 }
                 if (filterAnnotation.servletNames().length > 0)
                 {

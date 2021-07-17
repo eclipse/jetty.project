@@ -26,6 +26,7 @@ import javax.servlet.annotation.WebInitParam;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 
+import org.eclipse.jetty.http.pathmap.PathSpec;
 import org.eclipse.jetty.http.pathmap.ServletPathSpec;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.servlet.ServletMapping;
@@ -156,7 +157,7 @@ public class WebServletAnnotation extends DiscoveredAnnotation
 
             mapping = new ServletMapping(source);
             mapping.setServletName(holder.getName());
-            mapping.setPathSpecs(LazyList.toStringArray(urlPatternList));
+            mapping.setServletPathSpecs(LazyList.toStringArray(urlPatternList));
         }
         else
         {
@@ -192,7 +193,7 @@ public class WebServletAnnotation extends DiscoveredAnnotation
             {
                 mapping = new ServletMapping(new Source(Source.Origin.ANNOTATION, clazz.getName()));
                 mapping.setServletName(servletName);
-                mapping.setPathSpecs(LazyList.toStringArray(urlPatternList));
+                mapping.setServletPathSpecs(LazyList.toStringArray(urlPatternList));
             }
         }
 
@@ -213,10 +214,11 @@ public class WebServletAnnotation extends DiscoveredAnnotation
             //  guard against duplicate path mapping here: that is the job of the ServletHandler
             for (String p : urlPatternList)
             {
+                PathSpec pathSpec = new ServletPathSpec(p);
                 ServletMapping existingMapping = _context.getServletHandler().getServletMapping(p);
                 if (existingMapping != null && existingMapping.isDefault())
                 {
-                    String[] updatedPaths = ArrayUtil.removeFromArray(existingMapping.getPathSpecs(), p);
+                    PathSpec[] updatedPaths = ArrayUtil.removeFromArray(existingMapping.toPathSpecs(), pathSpec);
                     //if we removed the last path from a servletmapping, delete the servletmapping
                     if (updatedPaths == null || updatedPaths.length == 0)
                     {
@@ -234,7 +236,7 @@ public class WebServletAnnotation extends DiscoveredAnnotation
                 _context.getMetaData().setOrigin(servletName + ".servlet.mapping." + p, annotation, clazz);
             }
             allMappings.add(mapping);
-            _context.getServletHandler().setServletMappings(allMappings.toArray(new ServletMapping[allMappings.size()]));
+            _context.getServletHandler().setServletMappings(allMappings.toArray(new ServletMapping[0]));
         }
     }
 

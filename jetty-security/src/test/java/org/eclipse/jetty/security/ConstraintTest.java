@@ -34,6 +34,7 @@ import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.servlet.HttpConstraintElement;
 import javax.servlet.HttpMethodConstraintElement;
@@ -47,6 +48,9 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.http.HttpHeader;
 import org.eclipse.jetty.http.HttpStatus;
 import org.eclipse.jetty.http.HttpTester;
+import org.eclipse.jetty.http.pathmap.PathSpec;
+import org.eclipse.jetty.http.pathmap.RegexPathSpec;
+import org.eclipse.jetty.http.pathmap.ServletPathSpec;
 import org.eclipse.jetty.security.authentication.BasicAuthenticator;
 import org.eclipse.jetty.security.authentication.DigestAuthenticator;
 import org.eclipse.jetty.security.authentication.FormAuthenticator;
@@ -75,7 +79,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import static java.nio.charset.StandardCharsets.ISO_8859_1;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.in;
 import static org.hamcrest.Matchers.is;
@@ -157,7 +160,7 @@ public class ConstraintTest
         _forbidConstraint.setAuthenticate(true);
         _forbidConstraint.setName("forbid");
         ConstraintMapping mapping0 = new ConstraintMapping();
-        mapping0.setPathSpec("/forbid/*");
+        mapping0.setServletPathSpec("/forbid/*");
         mapping0.setConstraint(_forbidConstraint);
 
         _authAnyRoleConstraint = new Constraint();
@@ -165,7 +168,7 @@ public class ConstraintTest
         _authAnyRoleConstraint.setName("auth");
         _authAnyRoleConstraint.setRoles(new String[]{Constraint.ANY_ROLE});
         ConstraintMapping mapping1 = new ConstraintMapping();
-        mapping1.setPathSpec("/auth/*");
+        mapping1.setServletPathSpec("/auth/*");
         mapping1.setConstraint(_authAnyRoleConstraint);
 
         _authAdminConstraint = new Constraint();
@@ -173,7 +176,7 @@ public class ConstraintTest
         _authAdminConstraint.setName("admin");
         _authAdminConstraint.setRoles(new String[]{"administrator"});
         ConstraintMapping mapping2 = new ConstraintMapping();
-        mapping2.setPathSpec("/admin/*");
+        mapping2.setServletPathSpec("/admin/*");
         mapping2.setConstraint(_authAdminConstraint);
         mapping2.setMethod("GET");
         ConstraintMapping mapping2o = new ConstraintMapping();
@@ -185,7 +188,7 @@ public class ConstraintTest
         _relaxConstraint.setAuthenticate(false);
         _relaxConstraint.setName("relax");
         ConstraintMapping mapping3 = new ConstraintMapping();
-        mapping3.setPathSpec("/admin/relax/*");
+        mapping3.setServletPathSpec("/admin/relax/*");
         mapping3.setConstraint(_relaxConstraint);
 
         _loginPageConstraint = new Constraint();
@@ -193,14 +196,14 @@ public class ConstraintTest
         _loginPageConstraint.setName("loginpage");
         _loginPageConstraint.setRoles(new String[]{"administrator"});
         ConstraintMapping mapping4 = new ConstraintMapping();
-        mapping4.setPathSpec("/testLoginPage");
+        mapping4.setServletPathSpec("/testLoginPage");
         mapping4.setConstraint(_loginPageConstraint);
 
         _noAuthConstraint = new Constraint();
         _noAuthConstraint.setAuthenticate(false);
         _noAuthConstraint.setName("allow forbidden");
         ConstraintMapping mapping5 = new ConstraintMapping();
-        mapping5.setPathSpec("/forbid/post");
+        mapping5.setServletPathSpec("/forbid/post");
         mapping5.setConstraint(_noAuthConstraint);
         mapping5.setMethod("POST");
         ConstraintMapping mapping5o = new ConstraintMapping();
@@ -213,7 +216,7 @@ public class ConstraintTest
         _confidentialDataConstraint.setName("data constraint");
         _confidentialDataConstraint.setDataConstraint(Constraint.DC_CONFIDENTIAL);
         ConstraintMapping mapping6 = new ConstraintMapping();
-        mapping6.setPathSpec("/data/*");
+        mapping6.setServletPathSpec("/data/*");
         mapping6.setConstraint(_confidentialDataConstraint);
 
         _anyUserAuthConstraint = new Constraint();
@@ -223,7 +226,7 @@ public class ConstraintTest
             Constraint.ANY_AUTH, "user"
         }); //the "user" role is superfluous once ** has been defined
         ConstraintMapping mapping7 = new ConstraintMapping();
-        mapping7.setPathSpec("/starstar/*");
+        mapping7.setServletPathSpec("/starstar/*");
         mapping7.setConstraint(_anyUserAuthConstraint);
 
         return Arrays.asList(mapping0, mapping1, mapping2, mapping2o, mapping3, mapping4, mapping5, mapping5o, mapping6, mapping7);
@@ -260,7 +263,7 @@ public class ConstraintTest
         
         //Add a non-durable constraint
         ConstraintMapping mapping = new ConstraintMapping();
-        mapping.setPathSpec("/xxxx/*");
+        mapping.setServletPathSpec("/xxxx/*");
         Constraint constraint = new Constraint();
         constraint.setAuthenticate(false);
         constraint.setName("transient");
@@ -463,14 +466,14 @@ public class ConstraintTest
         constraint1.setName("** constraint");
         constraint1.setRoles(new String[]{Constraint.ANY_AUTH, "user"}); //No methods named, no uncovered methods
         ConstraintMapping mapping1 = new ConstraintMapping();
-        mapping1.setPathSpec("/starstar/*");
+        mapping1.setServletPathSpec("/starstar/*");
         mapping1.setConstraint(constraint1);
 
         _security.setConstraintMappings(Collections.singletonList(mapping1));
         _security.setAuthenticator(new BasicAuthenticator());
         _server.start();
 
-        Set<String> uncoveredPaths = _security.getPathsWithUncoveredHttpMethods();
+        Set<PathSpec> uncoveredPaths = _security.getPathsWithUncoveredHttpMethods();
         assertTrue(uncoveredPaths.isEmpty()); //no uncovered methods
 
         //Test only an explicitly named method, no omissions to cover other methods
@@ -479,7 +482,7 @@ public class ConstraintTest
         constraint2.setName("user constraint");
         constraint2.setRoles(new String[]{"user"});
         ConstraintMapping mapping2 = new ConstraintMapping();
-        mapping2.setPathSpec("/user/*");
+        mapping2.setServletPathSpec("/user/*");
         mapping2.setMethod("GET");
         mapping2.setConstraint(constraint2);
 
@@ -487,14 +490,14 @@ public class ConstraintTest
         uncoveredPaths = _security.getPathsWithUncoveredHttpMethods();
         assertNotNull(uncoveredPaths);
         assertEquals(1, uncoveredPaths.size());
-        assertThat("/user/*", is(in(uncoveredPaths)));
+        assertThat(new ServletPathSpec("/user/*"), is(in(uncoveredPaths)));
 
         //Test an explicitly named method with an http-method-omission to cover all other methods
         Constraint constraint2a = new Constraint();
         constraint2a.setAuthenticate(true);
         constraint2a.setName("forbid constraint");
         ConstraintMapping mapping2a = new ConstraintMapping();
-        mapping2a.setPathSpec("/user/*");
+        mapping2a.setServletPathSpec("/user/*");
         mapping2a.setMethodOmissions(new String[]{"GET"});
         mapping2a.setConstraint(constraint2a);
 
@@ -508,14 +511,14 @@ public class ConstraintTest
         constraint3.setAuthenticate(true);
         constraint3.setName("omit constraint");
         ConstraintMapping mapping3 = new ConstraintMapping();
-        mapping3.setPathSpec("/omit/*");
+        mapping3.setServletPathSpec("/omit/*");
         mapping3.setMethodOmissions(new String[]{"GET", "POST"});
         mapping3.setConstraint(constraint3);
 
         _security.addConstraintMapping(mapping3);
         uncoveredPaths = _security.getPathsWithUncoveredHttpMethods();
         assertNotNull(uncoveredPaths);
-        assertThat("/omit/*", is(in(uncoveredPaths)));
+        assertThat(new ServletPathSpec("/omit/*"), is(in(uncoveredPaths)));
 
         _security.setDenyUncoveredHttpMethods(true);
         uncoveredPaths = _security.getPathsWithUncoveredHttpMethods();
@@ -727,7 +730,7 @@ public class ConstraintTest
         constraint6.setName("omit HEAD and GET");
         constraint6.setRoles(new String[]{"user"});
         ConstraintMapping mapping6 = new ConstraintMapping();
-        mapping6.setPathSpec("/omit/*");
+        mapping6.setServletPathSpec("/omit/*");
         mapping6.setConstraint(constraint6);
         mapping6.setMethodOmissions(new String[]{
             "GET", "HEAD"
@@ -739,7 +742,7 @@ public class ConstraintTest
         constraint7.setName("non-omitted GET");
         constraint7.setRoles(new String[]{"administrator"});
         ConstraintMapping mapping7 = new ConstraintMapping();
-        mapping7.setPathSpec("/omit/*");
+        mapping7.setServletPathSpec("/omit/*");
         mapping7.setConstraint(constraint7);
         mapping7.setMethod("GET"); //requests for GET must be in role "admin"
         list.add(mapping7);
@@ -749,7 +752,7 @@ public class ConstraintTest
         constraint8.setName("non specific");
         constraint8.setRoles(new String[]{"foo"});
         ConstraintMapping mapping8 = new ConstraintMapping();
-        mapping8.setPathSpec("/omit/*");
+        mapping8.setServletPathSpec("/omit/*");
         mapping8.setConstraint(constraint8); //requests for all methods must be in role "foo"
         list.add(mapping8);
 
@@ -1783,7 +1786,7 @@ public class ConstraintTest
         _server.start();
 
         String response;
-        response = _connector.getResponse("GET /ctx/forbid/somethig HTTP/1.0\r\n\r\n");
+        response = _connector.getResponse("GET /ctx/forbid/something HTTP/1.0\r\n\r\n");
         assertThat(response, startsWith("HTTP/1.1 403 "));
 
         response = _connector.getResponse("POST /ctx/forbid/post HTTP/1.0\r\n\r\n");
@@ -1805,7 +1808,7 @@ public class ConstraintTest
         Logger.getAnonymousLogger().info("Uncovered method for /specific/method is expected");
         _server.start();
 
-        assertThat(_security.getPathsWithUncoveredHttpMethods(), contains("/specific/method"));
+        assertThat(_security.getPathsWithUncoveredHttpMethods().stream().map(PathSpec::getDeclaration).collect(Collectors.toSet()), Matchers.hasItem("/specific/method"));
 
         String response;
         response = _connector.getResponse("GET /ctx/specific/method HTTP/1.0\r\n\r\n");
@@ -1861,6 +1864,31 @@ public class ConstraintTest
         assertThat(response, startsWith("HTTP/1.1 200 "));
 
         response = _connector.getResponse("OPTIONS /ctx/some/constraint/info HTTP/1.0\r\n\r\n");
+        assertThat(response, startsWith("HTTP/1.1 403 "));
+    }
+    
+    @Test
+    public void testNonStandardPathSpecs() throws Exception
+    {
+        _security.setAuthenticator(new BasicAuthenticator());
+        ConstraintMapping evil = new ConstraintMapping();
+        evil.setPathSpec(new RegexPathSpec(".*666.*"));
+        evil.setConstraint(new Constraint("evil", true));
+        _security.addConstraintMapping(evil);
+        ConstraintMapping answer = new ConstraintMapping();
+        answer.setPathSpec(new RegexPathSpec(".*42.*"));
+        answer.setConstraint(new Constraint("answer", true, "user"));
+        _security.addConstraintMapping(answer);
+        _server.start();
+        _server.dumpStdErr();
+        String response;
+        response = _connector.getResponse("GET /ctx/some/path HTTP/1.0\r\n\r\n");
+        assertThat(response, startsWith("HTTP/1.1 200 "));
+        response = _connector.getResponse("GET /ctx/some/p42th HTTP/1.0\r\n\r\n");
+        assertThat(response, startsWith("HTTP/1.1 401 "));
+        response = _connector.getResponse("GET /ctx/some/p666th HTTP/1.0\r\n\r\n");
+        assertThat(response, startsWith("HTTP/1.1 403 "));
+        response = _connector.getResponse("GET /ctx/s42me/p666th HTTP/1.0\r\n\r\n");
         assertThat(response, startsWith("HTTP/1.1 403 "));
     }
 

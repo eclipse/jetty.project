@@ -373,7 +373,7 @@ public class Runner
 
                                     ConstraintMapping cm = new ConstraintMapping();
                                     cm.setConstraint(constraint);
-                                    cm.setPathSpec("/*");
+                                    cm.setServletPathSpec("/*");
 
                                     ConstraintSecurityHandler securityHandler = new ConstraintSecurityHandler();
                                     securityHandler.setLoginService(loginService);

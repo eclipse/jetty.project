@@ -25,6 +25,7 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.EventListener;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Map;
@@ -52,7 +53,6 @@ import javax.servlet.http.HttpServletResponse;
 import org.eclipse.jetty.http.pathmap.MappedResource;
 import org.eclipse.jetty.http.pathmap.PathMappings;
 import org.eclipse.jetty.http.pathmap.PathSpec;
-import org.eclipse.jetty.http.pathmap.ServletPathSpec;
 import org.eclipse.jetty.security.IdentityService;
 import org.eclipse.jetty.security.SecurityHandler;
 import org.eclipse.jetty.server.Request;
@@ -406,23 +406,12 @@ public class ServletHandler extends ScopedHandler
         if (pathSpec == null || _servletMappings == null)
             return null;
 
-        ServletMapping mapping = null;
-        for (int i = 0; i < _servletMappings.length && mapping == null; i++)
+        for (ServletMapping m : _servletMappings)
         {
-            ServletMapping m = _servletMappings[i];
-            if (m.getPathSpecs() != null)
-            {
-                for (String p : m.getPathSpecs())
-                {
-                    if (pathSpec.equals(p))
-                    {
-                        mapping = m;
-                        break;
-                    }
-                }
-            }
+            if (m.containsPathSpec(pathSpec))
+                return m;
         }
-        return mapping;
+        return null;
     }
 
     @ManagedAttribute(value = "servlets", readonly = true)
@@ -843,11 +832,42 @@ public class ServletHandler extends ScopedHandler
      * @param pathSpec the path spec
      * @return The servlet holder.
      */
+    public ServletHolder addServletWithMapping(String className, PathSpec pathSpec)
+    {
+        ServletHolder holder = newServletHolder(Source.EMBEDDED);
+        holder.setClassName(className);
+        addServletWithMapping(holder, pathSpec);
+        return holder;
+    }
+
+    /**
+     * Convenience method to add a servlet.
+     *
+     * @param className the class name
+     * @param pathSpec the path spec
+     * @return The servlet holder.
+     */
     public ServletHolder addServletWithMapping(String className, String pathSpec)
     {
         ServletHolder holder = newServletHolder(Source.EMBEDDED);
         holder.setClassName(className);
         addServletWithMapping(holder, pathSpec);
+        return holder;
+    }
+
+    /**
+     * Convenience method to add a servlet.
+     *
+     * @param servlet the servlet class
+     * @param pathSpec the path spec
+     * @return The servlet holder.
+     */
+    public ServletHolder addServletWithMapping(Class<? extends Servlet> servlet, PathSpec pathSpec)
+    {
+        ServletHolder holder = newServletHolder(Source.EMBEDDED);
+        holder.setHeldClass(servlet);
+        addServletWithMapping(holder, pathSpec);
+
         return holder;
     }
 
@@ -876,6 +896,38 @@ public class ServletHandler extends ScopedHandler
     public void addServletWithMapping(ServletHolder servlet, String pathSpec)
     {
         Objects.requireNonNull(servlet);
+        ServletMapping mapping = new ServletMapping();
+        mapping.setServletName(servlet.getName());
+        mapping.setPathSpec(pathSpec);
+        addServletWithMapping(servlet, mapping);
+    }
+
+    /**
+     * Convenience method to add a servlet.
+     *
+     * @param servlet servlet holder to add
+     * @param pathSpec servlet mappings for the servletHolder
+     */
+    public void addServletWithMapping(ServletHolder servlet, PathSpec pathSpec)
+    {
+        Objects.requireNonNull(servlet);
+        ServletMapping mapping = new ServletMapping();
+        mapping.setServletName(servlet.getName());
+        mapping.setPathSpec(pathSpec);
+        addServletWithMapping(servlet, mapping);
+    }
+
+    /**
+     * Convenience method to add a servlet.
+     *
+     * @param servlet servlet holder to add
+     * @param mapping a servlet mapping for the servletHolder
+     */
+    public void addServletWithMapping(ServletHolder servlet, ServletMapping mapping)
+    {
+        Objects.requireNonNull(servlet);
+        if (!servlet.getName().equals(mapping.getServletName()))
+            throw new IllegalArgumentException(String.format("Servlet name mismatch '%s'!='%s'", servlet.getName(), mapping.getServletName()));
         ServletHolder[] holders = getServlets();
         try
         {
@@ -885,9 +937,6 @@ public class ServletHandler extends ScopedHandler
                     setServlets(ArrayUtil.addToArray(holders, servlet, ServletHolder.class));
             }
 
-            ServletMapping mapping = new ServletMapping();
-            mapping.setServletName(servlet.getName());
-            mapping.setPathSpec(pathSpec);
             setServletMappings(ArrayUtil.addToArray(getServletMappings(), mapping, ServletMapping.class));
         }
         catch (RuntimeException e)
@@ -1318,7 +1367,8 @@ public class ServletHandler extends ScopedHandler
                 if (filterHolder == null)
                     throw new IllegalStateException("No filter named " + filtermapping.getFilterName());
                 filtermapping.setFilterHolder(filterHolder);
-                if (filtermapping.getPathSpecs() != null)
+
+                if (filtermapping.hasPathSpecs())
                     _filterPathMappings.add(filtermapping);
 
                 if (filtermapping.getServletNames() != null)
@@ -1350,27 +1400,25 @@ public class ServletHandler extends ScopedHandler
         {
             PathMappings<ServletHolder> pm = new PathMappings<>();
 
-            //create a map of paths to set of ServletMappings that define that mapping
-            HashMap<String, List<ServletMapping>> sms = new HashMap<>();
+            // Create a map of String paths (servlet url-pattern) to set of ServletMappings that define that mapping
+            // Use a LinkedHashMap to preserve the order as some PathSpec types are order dependent when added to a
+            // PathMappings
+            Map<PathSpec, List<ServletMapping>> servletUrlMappings = new LinkedHashMap<>();
             for (ServletMapping servletMapping : _servletMappings)
             {
-                String[] pathSpecs = servletMapping.getPathSpecs();
-                if (pathSpecs != null)
+                servletMapping.stream().forEach(pathSpec ->
                 {
-                    for (String pathSpec : pathSpecs)
-                    {
-                        List<ServletMapping> mappings = sms.computeIfAbsent(pathSpec, k -> new ArrayList<>());
-                        mappings.add(servletMapping);
-                    }
-                }
+                    List<ServletMapping> mappings = servletUrlMappings.computeIfAbsent(pathSpec, k -> new ArrayList<>());
+                    mappings.add(servletMapping);
+                });
             }
 
-            //evaluate path to servlet map based on servlet mappings
-            for (String pathSpec : sms.keySet())
+            // evaluate path to servlet map based on servlet mappings
+            for (PathSpec pathSpec : servletUrlMappings.keySet())
             {
                 //for each path, look at the mappings where it is referenced
                 //if a mapping is for a servlet that is not enabled, skip it
-                List<ServletMapping> mappings = sms.get(pathSpec);
+                List<ServletMapping> mappings = servletUrlMappings.get(pathSpec);
 
                 ServletMapping finalMapping = null;
                 for (ServletMapping mapping : mappings)
@@ -1421,7 +1469,7 @@ public class ServletHandler extends ScopedHandler
                         finalMapping.getServletName(),
                         _servletNameMap.get(finalMapping.getServletName()).getSource());
 
-                pm.put(new ServletPathSpec(pathSpec), _servletNameMap.get(finalMapping.getServletName()));
+                pm.put(pathSpec, _servletNameMap.get(finalMapping.getServletName()));
             }
 
             _servletPathMap = pm;
