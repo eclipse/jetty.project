@@ -17,7 +17,7 @@
             <Entry>
                 <!-- Realm as utilised by Jetty Security  -->
                 <Item>org.eclipse.jetty.security.jaspi.modules.RealmName</Item>
-                <Item>TestRealm</Item>
+                <Item>Test Realm</Item>
             </Entry>
         </Map>
       </Arg>
@@ -27,12 +27,15 @@
         Application Context Identifier as per spec chapter 3.2:
         
         AppContextID ::= hostname blank context-path
+
+        The algorithm applied here will use the 
+        _serverName on the configured JaspiAuthenticatorFactory (if set) and try to match it
+        against the "server" part (in the "server /ctx" example below).
+        Next it will try to match the ServletContext#getVirtualServerName to the "server" part. 
+        If neither are set, it will then try to match the first Subject's principal name, and finally fall back to
+        the default value "server" if none are available.        
         
-        Hostname may be the physical or logical server name.
-        Per the specification this should match the value returned from 
-        getVirtualServerName on the ServletContext corresponding to the web application
-        where this applies. 
-        Likewise, the context-path should match the context path where this applies.  
+        The context-path should match the context path where this applies.  
       -->
       <Arg type="String">server /ctx</Arg>
       <!-- 
