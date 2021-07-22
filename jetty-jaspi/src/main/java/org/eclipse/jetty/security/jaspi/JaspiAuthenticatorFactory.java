@@ -92,8 +92,8 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
         if (factory == null)
             return null;
 
-        String serverName = findServerName(server);
         Subject serviceSubject = findServiceSubject(server);
+        String serverName = findServerName(context, serviceSubject);
         String contextPath = StringUtil.isEmpty(context.getContextPath()) ? "/" : context.getContextPath();
         String appContext = serverName + " " + contextPath;
 
@@ -124,6 +124,35 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
 
     /**
      * Find a servername. If {@link #setServerName(String)} has not been called,
+     * then use the virtualServerName of the context.
+     * If this is also null, then use the name of the a principal in the service subject.
+     * If none are found, return "server".
+     *
+     * @param context the ServletContext used to look for the virtual server name.
+     * @param subject the server subject to find the name from.
+     * @return the server name from the service Subject (or default value if not found in subject or principals).
+     */
+    protected String findServerName(ServletContext context, Subject subject)
+    {
+        if (_serverName != null)
+            return _serverName;
+
+        String virtualServerName = context.getVirtualServerName();
+        if (virtualServerName != null)
+            return virtualServerName;
+
+        if (subject != null)
+        {
+            Set<Principal> principals = subject.getPrincipals();
+            if (principals != null && !principals.isEmpty())
+                return principals.iterator().next().getName();
+        }
+
+        return "server";
+    }
+
+    /**
+     * Find a servername. If {@link #setServerName(String)} has not been called,
      * then use the name of the a principal in the service subject. If not found,
      * return "server".
      *
@@ -131,6 +160,7 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
      * @return the server name from the service Subject (or default value if not
      *         found in subject or principals)
      */
+    @Deprecated
     protected String findServerName(Server server)
     {
         if (_serverName != null)

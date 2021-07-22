@@ -1,7 +1,14 @@
 <?xml version="1.0"?>
 <!DOCTYPE Configure PUBLIC "-//Jetty//Configure//EN" "https://www.eclipse.org/jetty/configure_10_0.dtd">
 
+<!-- tag::documentation[] -->
 <Configure>
+  <!--
+    Example configuration of a Basic Authentication Module for the Jakarta Authentication SPI
+
+    Input provided below conforms to the Jakarta Authentication 2.0 specification:
+    https://jakarta.ee/specifications/authentication/2.0/jakarta-authentication-spec-2.0.pdf
+  -->
   <Call class="jakarta.security.auth.message.config.AuthConfigFactory" name="getFactory">
     <Call name="registerConfigProvider">
 
@@ -27,9 +34,11 @@
       <!-- Message Layer Identifier as per spec chapter 3.1  -->
       <Arg type="String">HttpServlet</Arg>
 
-      <!-- Application Context Identifier as per spec chapter 3.2
+      <!--
+        Application Context Identifier as per spec chapter 3.2:
 
         AppContextID ::= hostname blank context-path
+
         The algorithm applied here will use the
         _serverName on the configured JaspiAuthenticatorFactory (if set) and try to match it
         against the "server" part (in the "server /ctx" example below).
@@ -46,3 +55,4 @@
     </Call>
   </Call>
 </Configure>
+<!-- end::documentation[] -->
