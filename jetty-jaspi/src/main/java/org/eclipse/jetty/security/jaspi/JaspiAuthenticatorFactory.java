@@ -14,17 +14,11 @@
 package org.eclipse.jetty.security.jaspi;
 
 import java.security.Principal;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import javax.security.auth.Subject;
 
-import jakarta.security.auth.message.AuthException;
 import jakarta.security.auth.message.config.AuthConfigFactory;
-import jakarta.security.auth.message.config.AuthConfigProvider;
-import jakarta.security.auth.message.config.RegistrationListener;
-import jakarta.security.auth.message.config.ServerAuthConfig;
 import jakarta.servlet.ServletContext;
 import org.eclipse.jetty.security.Authenticator;
 import org.eclipse.jetty.security.Authenticator.AuthConfiguration;
@@ -32,6 +26,7 @@ import org.eclipse.jetty.security.DefaultAuthenticatorFactory;
 import org.eclipse.jetty.security.IdentityService;
 import org.eclipse.jetty.security.LoginService;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.util.StringUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,8 +48,7 @@ import org.slf4j.LoggerFactory;
 public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
 {
     private static final Logger LOG = LoggerFactory.getLogger(JaspiAuthenticatorFactory.class);
-
-    private static String MESSAGE_LAYER = "HttpServlet";
+    public static final String MESSAGE_LAYER = "HttpServlet";
 
     private Subject _serviceSubject;
     private String _serverName;
@@ -92,50 +86,22 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
     }
 
     @Override
-    public Authenticator getAuthenticator(Server server, ServletContext context, AuthConfiguration configuration,
-            IdentityService identityService, LoginService loginService)
+    public Authenticator getAuthenticator(Server server, ServletContext context, AuthConfiguration configuration, IdentityService identityService, LoginService loginService)
     {
-        Authenticator authenticator = null;
-        try
-        {
-            AuthConfigFactory authConfigFactory = AuthConfigFactory.getFactory();
-            RegistrationListener listener = (layer, appContext) -> 
-            {
-            };
+        AuthConfigFactory factory = AuthConfigFactory.getFactory();
+        if (factory == null)
+            return null;
 
-            Subject serviceSubject = findServiceSubject(server);
-            String serverName = findServerName(context, server);
+        Subject serviceSubject = findServiceSubject(server);
+        String serverName = findServerName(context, serviceSubject);
+        String contextPath = StringUtil.isEmpty(context.getContextPath()) ? "/" : context.getContextPath();
+        String appContext = serverName + " " + contextPath;
 
-            String contextPath = context.getContextPath();
-            if (contextPath == null || contextPath.length() == 0)
-                contextPath = "/";
-            String appContext = serverName + " " + contextPath;
+        // We will only create the Authenticator if an AuthConfigProvider matches this context.
+        if (factory.getConfigProvider(MESSAGE_LAYER, appContext, null) == null)
+            return null;
 
-            AuthConfigProvider authConfigProvider = authConfigFactory.getConfigProvider(MESSAGE_LAYER, appContext,
-                    listener);
-
-            if (authConfigProvider != null)
-            {
-                ServletCallbackHandler servletCallbackHandler = new ServletCallbackHandler(loginService);
-                ServerAuthConfig serverAuthConfig = authConfigProvider.getServerAuthConfig(MESSAGE_LAYER, appContext,
-                        servletCallbackHandler);
-                if (serverAuthConfig != null)
-                {
-                    Map map = new HashMap();
-                    for (String key : configuration.getInitParameterNames())
-                    {
-                        map.put(key, configuration.getInitParameter(key));
-                    }
-                    authenticator = new JaspiAuthenticator(serverAuthConfig, map, servletCallbackHandler,
-                            serviceSubject, true, identityService);
-                }
-            }
-        } 
-        catch (AuthException e)
-        {
-            LOG.warn("Failed to get ServerAuthConfig", e);
-        }
-        return authenticator;
+        return new JaspiAuthenticator(serviceSubject, appContext, true);
     }
 
     /**
@@ -158,23 +124,47 @@ public class JaspiAuthenticatorFactory extends DefaultAuthenticatorFactory
 
     /**
      * Find a servername. If {@link #setServerName(String)} has not been called,
-     * then use the virtualServerName of the context. 
-     * If this is also null, then use the name of the a principal in the service subject. 
+     * then use the virtualServerName of the context.
+     * If this is also null, then use the name of the a principal in the service subject.
      * If none are found, return "server".
-     * @param context 
+     *
+     * @param context the ServletContext used to look for the virtual server name.
+     * @param subject the server subject to find the name from.
+     * @return the server name from the service Subject (or default value if not found in subject or principals).
+     */
+    protected String findServerName(ServletContext context, Subject subject)
+    {
+        if (_serverName != null)
+            return _serverName;
+
+        String virtualServerName = context.getVirtualServerName();
+        if (virtualServerName != null)
+            return virtualServerName;
+
+        if (subject != null)
+        {
+            Set<Principal> principals = subject.getPrincipals();
+            if (principals != null && !principals.isEmpty())
+                return principals.iterator().next().getName();
+        }
+
+        return "server";
+    }
+
+    /**
+     * Find a servername. If {@link #setServerName(String)} has not been called,
+     * then use the name of the a principal in the service subject. If not found,
+     * return "server".
      *
      * @param server the server to find the name of
      * @return the server name from the service Subject (or default value if not
      *         found in subject or principals)
      */
-    protected String findServerName(ServletContext context, Server server)
-    {   
+    @Deprecated
+    protected String findServerName(Server server)
+    {
         if (_serverName != null)
             return _serverName;
-        
-        String virtualServerName = context.getVirtualServerName();
-        if (virtualServerName != null)
-            return virtualServerName;
 
         Subject subject = findServiceSubject(server);
         if (subject != null)

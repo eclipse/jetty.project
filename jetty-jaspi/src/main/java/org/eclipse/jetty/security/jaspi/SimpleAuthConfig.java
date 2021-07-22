@@ -15,63 +15,45 @@ package org.eclipse.jetty.security.jaspi;
 
 import java.util.Map;
 import javax.security.auth.Subject;
-import javax.security.auth.callback.CallbackHandler;
 
-import jakarta.security.auth.message.AuthException;
 import jakarta.security.auth.message.MessageInfo;
 import jakarta.security.auth.message.config.ServerAuthConfig;
 import jakarta.security.auth.message.config.ServerAuthContext;
-import jakarta.security.auth.message.module.ServerAuthModule;
 
 /**
- * Simple implementation of the {@link ServerAuthConfig} interface.
- * 
- * This implementation wires up the given {@link ServerAuthModule} to the appropriate Jakarta Authentication {@link ServerAuthContext} responsible 
- * for providing it.
+ * @deprecated use {@link org.eclipse.jetty.security.jaspi.provider.JaspiAuthConfigProvider}.
  */
+@Deprecated
 public class SimpleAuthConfig implements ServerAuthConfig
 {
+    public static final String HTTP_SERVLET = "HttpServlet";
 
-    private final String _messageLayer;
     private final String _appContext;
-    private final CallbackHandler _callbackHandler;
-    private final Map<String, String> _providerProperties;
-    private final ServerAuthModule _serverAuthModule;
 
-    public SimpleAuthConfig(String messageLayer, String appContext, CallbackHandler callbackHandler, Map<String, String> providerProperties,
-            ServerAuthModule serverAuthModule) 
+    private final ServerAuthContext _serverAuthContext;
+
+    public SimpleAuthConfig(String appContext, ServerAuthContext serverAuthContext)
     {
-        this._messageLayer = messageLayer;
         this._appContext = appContext;
-        this._callbackHandler = callbackHandler;
-        this._providerProperties = providerProperties;
-        this._serverAuthModule = serverAuthModule;
+        this._serverAuthContext = serverAuthContext;
     }
 
-    /**
-     * {@inheritDoc}
-     */
     @Override
-    public ServerAuthContext getAuthContext(String authContextID, Subject serviceSubject,
-            @SuppressWarnings("rawtypes") Map properties) throws AuthException
+    public ServerAuthContext getAuthContext(String authContextID, Subject serviceSubject, Map properties)
     {
-        return new SimpleServerAuthContext(_callbackHandler, _serverAuthModule, _providerProperties);
+        return _serverAuthContext;
     }
 
-    /** 
-     * {@inheritDoc}
-     * 
-     * supposed to be of form (logical) "host-name context-path" 
-     */
+    // supposed to be of form host-name<space>context-path
     @Override
     public String getAppContext()
     {
         return _appContext;
     }
-    
+
     // not used yet
     @Override
-    public String getAuthContextID(MessageInfo messageInfo)
+    public String getAuthContextID(MessageInfo messageInfo) throws IllegalArgumentException
     {
         return null;
     }
@@ -79,7 +61,7 @@ public class SimpleAuthConfig implements ServerAuthConfig
     @Override
     public String getMessageLayer()
     {
-        return _messageLayer;
+        return HTTP_SERVLET;
     }
 
     @Override
@@ -91,7 +73,5 @@ public class SimpleAuthConfig implements ServerAuthConfig
     @Override
     public void refresh()
     {
-        // NOOP
     }
-
 }

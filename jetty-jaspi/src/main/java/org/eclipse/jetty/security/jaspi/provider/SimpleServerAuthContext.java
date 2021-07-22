@@ -11,7 +11,7 @@
 // ========================================================================
 //
 
-package org.eclipse.jetty.security.jaspi;
+package org.eclipse.jetty.security.jaspi.provider;
 
 import java.util.Map;
 import javax.security.auth.Subject;
@@ -23,25 +23,24 @@ import jakarta.security.auth.message.MessageInfo;
 import jakarta.security.auth.message.config.ServerAuthContext;
 import jakarta.security.auth.message.module.ServerAuthModule;
 
-/** 
+/**
  * Simple bridge implementation of the Jakarta Authentication {@link ServerAuthContext} interface.
- * 
- * This implementation will only delegate to the provided {@link ServerAuthModule} implementation. 
+ *
+ * This implementation will only delegate to the provided {@link ServerAuthModule} implementation.
  */
-public class SimpleServerAuthContext implements ServerAuthContext
+class SimpleServerAuthContext implements ServerAuthContext
 {
     private final ServerAuthModule serverAuthModule;
 
-    public SimpleServerAuthContext(CallbackHandler callbackHandler, ServerAuthModule serverAuthModule,
-            @SuppressWarnings("rawtypes") Map properties) throws AuthException
+    @SuppressWarnings("rawtypes")
+    public SimpleServerAuthContext(CallbackHandler callbackHandler, ServerAuthModule serverAuthModule, Map properties) throws AuthException
     {
         this.serverAuthModule = serverAuthModule;
         serverAuthModule.initialize(null, null, callbackHandler, properties);
     }
 
     @Override
-    public AuthStatus validateRequest(MessageInfo messageInfo, Subject clientSubject, Subject serviceSubject)
-            throws AuthException
+    public AuthStatus validateRequest(MessageInfo messageInfo, Subject clientSubject, Subject serviceSubject) throws AuthException
     {
         return serverAuthModule.validateRequest(messageInfo, clientSubject, serviceSubject);
     }

@@ -43,7 +43,7 @@ import org.eclipse.jetty.util.security.Password;
  * Simple abstract module implementing a Jakarta Authentication {@link ServerAuthModule} and {@link ServerAuthContext}.
  * To be used as a building block for building more sophisticated auth modules.
  */
-public abstract class AbstractAuthModule implements ServerAuthModule, ServerAuthContext
+public abstract class BaseAuthModule implements ServerAuthModule, ServerAuthContext
 {
     private static final Class[] SUPPORTED_MESSAGE_TYPES = new Class[]{HttpServletRequest.class, HttpServletResponse.class};
 
@@ -57,11 +57,11 @@ public abstract class AbstractAuthModule implements ServerAuthModule, ServerAuth
         return SUPPORTED_MESSAGE_TYPES;
     }
 
-    public AbstractAuthModule()
+    public BaseAuthModule()
     {
     }
 
-    public AbstractAuthModule(CallbackHandler callbackHandler)
+    public BaseAuthModule(CallbackHandler callbackHandler)
     {
         this.callbackHandler = callbackHandler;
     }
@@ -108,9 +108,7 @@ public abstract class AbstractAuthModule implements ServerAuthModule, ServerAuth
         return Boolean.parseBoolean(mandatory);
     }
 
-    protected boolean login(Subject clientSubject, String credentials,
-                            String authMethod, MessageInfo messageInfo)
-        throws IOException, UnsupportedCallbackException
+    protected boolean login(Subject clientSubject, String credentials, String authMethod, MessageInfo messageInfo) throws IOException, UnsupportedCallbackException
     {
         credentials = credentials.substring(credentials.indexOf(' ') + 1);
         credentials = new String(Base64.getDecoder().decode(credentials), StandardCharsets.ISO_8859_1);
@@ -120,10 +118,7 @@ public abstract class AbstractAuthModule implements ServerAuthModule, ServerAuth
         return login(clientSubject, userName, new Password(password), authMethod, messageInfo);
     }
 
-    protected boolean login(Subject clientSubject, String username,
-                            Credential credential, String authMethod,
-                            MessageInfo messageInfo)
-        throws IOException, UnsupportedCallbackException
+    protected boolean login(Subject clientSubject, String username, Credential credential, String authMethod, MessageInfo messageInfo) throws IOException, UnsupportedCallbackException
     {
         CredentialValidationCallback credValidationCallback = new CredentialValidationCallback(clientSubject, username, credential);
         callbackHandler.handle(new Callback[]{credValidationCallback});
